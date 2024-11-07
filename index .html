@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashlight Music Visualization</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: black;
+      color: #ddd;
+      font-family: Arial, sans-serif;
+    }
+    #audioFile, #start {
+      background-color: #333;
+      color: #ddd;
+      border: none;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 5px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    #start:hover {
+      background-color: #555;
+    }
+    audio {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" id="audioFile" accept="audio/*">
+  <button id="start">Start Flashlight Visualization</button>
+  <audio id="audio" controls></audio> <!-- Audio controls added here -->
+
+  <script>
+    let track;
+
+    async function toggleTorch(on) {
+      if (track) {
+        await track.applyConstraints({
+          advanced: [{ torch: on }]
+        });
+      }
+    }
+
+    async function startVisualization() {
+      const audioFile = document.getElementById('audioFile').files[0];
+      if (!audioFile) {
+        alert('Please select an audio file first.');
+        return;
+      }
+
+      // Request camera access
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        track = stream.getVideoTracks()[0];
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        
+        const audioData = await audioFile.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(audioData);
+        
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        // Set up the audio player with the selected audio file
+        const audioElement = document.getElementById('audio');
+        audioElement.src = URL.createObjectURL(audioFile);
+        
+        // Start the audio playback
+        audioElement.play();
+        
+        // Connect the audio source to the analyser
+        source.start();
+
+        function flashTorch() {
+          analyser.getByteFrequencyData(dataArray);
+          const volume = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+          
+          toggleTorch(volume > 128);  // Turn on torch for loud parts, off for quiet parts
+          requestAnimationFrame(flashTorch);
+        }
+
+        flashTorch();  // Start flashing visualization
+      } catch (error) {
+        console.error('Error accessing camera or playing audio:', error);
+        alert('Your device or browser may not support flashlight access.');
+      }
+    }
+
+    document.getElementById('start').addEventListener('click', startVisualization);
+  </script>
+</body>
+</html>
